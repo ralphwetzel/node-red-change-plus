@@ -2,9 +2,14 @@
   "name": "@ralphwetzel/node-red-change-plus",
   "version": "0.0.1",
   "description": "Proposal for Node-RED change node with integrated function editor",
-  "main": "index.js",
+  "main": "change.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "node-red": {
+    "nodes": {
+      "change-plus": "change.js"
+    }
   },
   "keywords": [
     "Node-RED",
