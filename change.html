@@ -5,8 +5,8 @@
         }
     </style>
     <div class="form-row">
-        <label for="node-input-name"><i class="fa fa-tag"></i> <span data-i18n="common.label.name"></span></label>
-        <input type="text" id="node-input-name" style="width: calc(100% - 105px)"  data-i18n="[placeholder]common.label.name">
+        <label for="node-input-name"><i class="fa fa-tag"></i> <span data-i18n="node-red:common.label.name"></span></label>
+        <input type="text" id="node-input-name" style="width: calc(100% - 105px)"  data-i18n="[placeholder]node-red:common.label.name">
     </div>
     <div class="form-row" style="margin-bottom:0;">
         <label><i class="fa fa-list"></i> <span data-i18n="change.label.rules"></span></label>
@@ -14,6 +14,10 @@
     <div class="form-row node-input-rule-container-row">
         <ol id="node-input-rule-container"></ol>
     </div>
+    <div class="form-row" style="height: 0px; margin-bottom: 0px">
+        <div class="node-text-editor" id="node-input-func-editor" style="height: 0px"></div>
+    </div>
+    <input type="hidden" id="node-input-fnerr">
 </script>
 
 <script type="text/javascript">
@@ -25,7 +29,7 @@
             defaults: {
                 name: { value: "" },
                 rules: {
-                    value: [{ t: "set", p: "payload", pt: "msg", to: "", tot: "str" }],
+                    value: [{ t: "set", p: "payload", pt: "msg", to: "", tot: "str", fnerr: false}],
                     validate: function (rules, opt) {
                         let msg;
                         const errors = []
@@ -55,6 +59,19 @@
                         return true;
                     }
                 },
+                fnerr: {
+                    value: false,
+                    required: true,
+                    validate: function(v, opt) {
+
+                        console.log("fnerr", v);
+
+                        if ("false" == v) {
+                            return true;
+                        }
+                        return RED._("node-red:function.error.invalid-js");
+                    }
+                },
                 // legacy
                 action: { value: "" },
                 property: { value: "" },
@@ -66,8 +83,6 @@
             outputs: 1,
             icon: "swap.svg",
             label: function () {
-
-                console.log("lodash", this._.toString());
 
                 function prop2name(type, key) {
                     var result = RED.utils.parseContextKey(key);
@@ -107,35 +122,98 @@
             },
             oneditprepare: function () {
 
+                let node = this;
+
                 let function_type = {
                     value: "fn",
                     label: "function()",
                     icon: "resources/@ralphwetzel/node-red-change-plus/function.svg",
-                    validate: function (v) { try { JSON.parse(v); return true; } catch (e) { return false; } },
+                    validate: function (v) {
+
+                        let value = v.replace(/\t/g,"\n");
+
+                        console.log(value);
+                        
+                        let noerr = 0;
+
+                        if (node.editor) {
+                            node.editor.getModel().setValue(value);                            
+                            let annot = node.editor.getSession().getAnnotations();
+                            for (var k = 0; k < annot.length; k++) {                                
+                                if (annot[k].type === "error") {
+                                    noerr += annot.length;
+                                    break;
+                                }
+                            }
+                        }
+
+                        return (noerr === 0);
+
+                    },
                     expand: function () {
                         var that = this;
                         var value = this.value();
-                        try {
-                            value = JSON.stringify(JSON.parse(value), null, 4);
-                        } catch (err) {
-                        }
+                        // try {
+                        //     value = JSON.stringify(JSON.parse(value), null, 4);
+                        // } catch (err) {
+                        // }
                         RED.editor.editJavaScript({
-                            value: value,
+                            value: value.replace(/\t/g,"\n"),
+                            // value: value,
                             stateId: RED.editor.generateViewStateId("typedInput", that, "fn"),
                             focus: true,
-                            cancel: function() {},
+                            cancel: function () { },
                             complete: function (v) {
                                 var value = v;
                                 // try {
                                 //     value = JSON.stringify(JSON.parse(v));
                                 // } catch (err) {
                                 // }
-                                that.value(value);
+                                console.log(value);
+                                // that.value(value);
+                                that.value(v.replace(/\n/g,"\t"));
                             },
                             // extraLibs: extraLibs
                         })
                     }
                 }
+
+                var buildEditor = function (id, stateId, focus, value, defaultValue, extraLibs, offset) {
+                    var editor = RED.editor.createEditor({
+                        id: id,
+                        mode: 'ace/mode/nrjavascript',
+                        value: value || defaultValue || "",
+                        stateId: stateId,
+                        focus: true,
+                        globals: {
+                            msg: true,
+                            context: true,
+                            RED: true,
+                            util: true,
+                            flow: true,
+                            global: true,
+                            console: true,
+                            Buffer: true,
+                            setTimeout: true,
+                            clearTimeout: true,
+                            setInterval: true,
+                            clearInterval: true
+                        },
+                        extraLibs: extraLibs
+                    });
+                    if (defaultValue && value === "") {
+                        editor.moveCursorTo(defaultValue.split("\n").length + offset, 0);
+                    }
+                    editor.__stateId = stateId;
+                    return editor;
+                }
+
+                this.editor = buildEditor('node-input-func-editor', this.id + "/" + "editor", true, "", undefined, [], undefined, -1);
+                $('#node-input-func-editor').find(".red-ui-editor-text-container").css("border", "unset");
+
+                // *****
+                // no relevant change from here ...
+                // -->
 
                 var set = this._("node-red:change.action.set");
                 var change = this._("node-red:change.action.change");
@@ -149,9 +227,32 @@
                 var deepCopyLabel = this._("node-red:change.label.deepCopy");
 
                 function createPropertyValue(row2_1, row2_2, defaultType) {
-                    var propValInput = $('<input/>', { class: "node-input-rule-property-value", type: "text" })
+                    let propValInput = $('<input/>', { class: "node-input-rule-property-value", type: "text" })
                         .appendTo(row2_1)
+
+                        // <--
+                        // ... to here!
+                        // ***
+
                         .typedInput({ default: defaultType || 'str', types: ['msg', 'flow', 'global', 'str', 'num', 'bool', 'json', 'bin', 'date', 'jsonata', 'env', function_type] });
+
+                    let propValTimeout;
+
+                    propValInput.next().find(".red-ui-typedInput-input").on("input", '', function() {
+                        if (propValTimeout) {
+                            clearTimeout(propValTimeout);
+                            propValTimeout = undefined;
+                        }
+                        if (propValInput.typedInput('type') == "fn") {
+                            propValTimeout = setTimeout(function() {
+                                // Re-Do validation after Annotations have settled.
+                                propValInput.typedInput('validate');
+                            }, 1000);
+                        }
+                    })
+
+                    // ***
+                    // -->
 
                     var dcLabel = $('<label style="padding-left: 130px;"></label>').appendTo(row2_2);
                     var deepCopy = $('<input type="checkbox" class="node-input-rule-property-deepCopy" style="width: auto; margin: 0 6px 0 0">').appendTo(dcLabel)
@@ -168,12 +269,37 @@
                         .typedInput({ default: defaultType || 'str', types: ['msg', 'flow', 'global', 'str', 're', 'num', 'bool', 'env'] });
                 }
                 function createToValue(row3_2, defaultType) {
-                    return $('<input/>', { class: "node-input-rule-property-replace-value", type: "text" })
+                    
+                    // <--
+                    // ***
+                    
+                    let toValInput = $('<input/>', { class: "node-input-rule-property-replace-value", type: "text" })
                         .appendTo(row3_2)
                         .typedInput({
                             default: defaultType || 'str',
                             types: ['msg', 'flow', 'global', 'str', 'num', 'bool', 'json', 'bin', 'env', function_type]
                         });
+                    
+                    let toValTimeout;
+
+                    toValInput.next().find(".red-ui-typedInput-input").on("input", '', function() {
+                        if (toValTimeout) {
+                                clearTimeout(toValTimeout);
+                                toValTimeout = undefined;
+                            }
+                        if (toValInput.typedInput('type') == "fn") {
+                            toValTimeout = setTimeout(function() {
+                                // Re-Do validation after Annotations have settled.
+                                toValInput.typedInput('validate');
+                            }, 1000);
+                        }
+                    })
+                    
+                    return toValInput;
+
+                // ***
+                // --> (End!)
+
                 }
                 function createMoveValue(row4, defaultType) {
                     return $('<input/>', { class: "node-input-rule-property-move-value", type: "text" })
@@ -185,7 +311,7 @@
                     addItem: function (container, i, opt) {
                         var rule = opt;
                         if (!rule.hasOwnProperty('t')) {
-                            rule = { t: "set", p: "payload", to: "", tot: "str" };
+                            rule = { t: "set", p: "payload", to: "", tot: "str", fnerr: false };
                         }
                         if (rule.t === "change" && rule.re) {
                             rule.fromt = 're';
@@ -308,6 +434,11 @@
                             propertyValue = parts[0];
                             deepCopy = parts[1];
                             propertyValue.typedInput('value', rule.to);
+
+                            if (propertyValue.typedInput('type') == "fn") {
+                                propertyValue.next().toggleClass("input-error", rule.fnerr);
+                            } 
+
                             deepCopy.prop("checked", !!rule.dc);
                         }
                         if (rule.t == "move") {
@@ -320,6 +451,10 @@
 
                             toValue = createToValue(row3_2, rule.tot);
                             toValue.typedInput('value', rule.to);
+
+                            if (toValue.typedInput('type') == "fn") {
+                                toValue.next().toggleClass("input-error", rule.fnerr);
+                            }
                         }
                         selectField.change();
                         container[0].appendChild(fragment);
@@ -361,13 +496,18 @@
                 var rules = $("#node-input-rule-container").editableList('items');
                 var node = this;
                 node.rules = [];
+
+                let fnerr = false;
+                // $("#node-input-fnerr").val(false);
+
                 rules.each(function (i) {
                     var rule = $(this);
                     var type = rule.find(".node-input-rule-type").val();
                     var r = {
                         t: type,
                         p: rule.find(".node-input-rule-property-name").typedInput('value'),
-                        pt: rule.find(".node-input-rule-property-name").typedInput('type')
+                        pt: rule.find(".node-input-rule-property-name").typedInput('type'),
+                        fnerr: false
                     };
                     if (type === "set") {
                         r.to = rule.find(".node-input-rule-property-value").typedInput('value');
@@ -375,6 +515,7 @@
                         if (rule.find(".node-input-rule-property-deepCopy").prop("checked")) {
                             r.dc = true;
                         }
+                        r.fnerr = rule.find(".node-input-rule-property-value").next().hasClass('input-error');
                     } else if (type === "move") {
                         r.to = rule.find(".node-input-rule-property-move-value").typedInput('value');
                         r.tot = rule.find(".node-input-rule-property-move-value").typedInput('type');
@@ -383,9 +524,27 @@
                         r.fromt = rule.find(".node-input-rule-property-search-value").typedInput('type');
                         r.to = rule.find(".node-input-rule-property-replace-value").typedInput('value');
                         r.tot = rule.find(".node-input-rule-property-replace-value").typedInput('type');
+                        r.fnerr = rule.find(".node-input-rule-property-replace-value").next().hasClass('input-error');
                     }
                     node.rules.push(r);
+                    fnerr = fnerr || r.fnerr;
                 });
+
+                node.editor.destroy();
+                delete node.editor;
+
+                // need to stringify fnerr here; if not, the red triangle would always be triggered!
+                node.fnerr = fnerr ? "true" : "false";
+                $("#node-input-fnerr").val(node.fnerr);
+
+                console.log("node.fnerr", node.fnerr);
+
+            },
+            oneditcancel: function () {
+                var node = this;
+
+                node.editor.destroy();
+                delete node.editor;
             },
             oneditresize: function (size) {
                 var rows = $("#dialog-form>div:not(.node-input-rule-container-row)");

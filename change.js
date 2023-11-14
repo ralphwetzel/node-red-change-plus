@@ -134,9 +134,10 @@ module.exports = function(RED) {
                 });
                 return;
             } else if (rule.tot === 'fn') {
-                sandbox.evaluate(RED, node, rule.to, msg, (err, value) => {
+                let script = rule.to.replace(/\t/g,"\n");
+                sandbox.evaluate(RED, node, script, msg, (err, value) => {
                     if (err) {
-                        done(RED._("change.errors.invalid-expr",{error:err.message}))
+                        done(err.toString())
                     } else {
                         done(undefined,value);
                     }
