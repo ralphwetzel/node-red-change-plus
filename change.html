@@ -131,13 +131,10 @@
                     validate: function (v) {
 
                         let value = v.replace(/\t/g,"\n");
-
-                        console.log(value);
-                        
                         let noerr = 0;
 
                         if (node.editor) {
-                            node.editor.getModel().setValue(value);                            
+                            node.editor.setValue(value, -1);                            
                             let annot = node.editor.getSession().getAnnotations();
                             for (var k = 0; k < annot.length; k++) {                                
                                 if (annot[k].type === "error") {
