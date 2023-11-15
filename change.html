@@ -126,9 +126,6 @@
                     value: "false",
                     required: true,
                     validate: function(v, opt) {
-
-                        console.log("fnerr", v);
-
                         if ("false" == v) {
                             return true;
                         }
@@ -229,7 +226,7 @@
                                 //     value = JSON.stringify(JSON.parse(v));
                                 // } catch (err) {
                                 // }
-                                console.log(value);
+                                // console.log(value);
                                 // that.value(value);
                                 that.value(v.replace(/\n/g,"\t"));
                             },
@@ -596,8 +593,6 @@
                 // need to stringify fnerr here; if not, the red triangle would always be triggered!
                 node.fnerr = fnerr ? "true" : "false";
                 $("#node-input-fnerr").val(node.fnerr);
-
-                console.log("node.fnerr", node.fnerr);
 
             },
             oneditcancel: function () {
